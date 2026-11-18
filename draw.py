@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Draw the 17 November 2026 world-news front page as a 1024x1024 PNG.
 
-Layout: newspaper masthead ("WORLD NEWS" + date band) on top, then six
-story blocks in a 2x3 grid. Each block has a simple drawn icon, a bold
-headline and one short factual line. Dark text on white paper, large type
-so it stays legible when the image is shown small.
+Dense front page: masthead with the day named prominently, a large lead
+story, then 30 further real stories grouped by region in two columns, plus
+a footer of briefs. Dark text on white paper, clear hierarchy so the page
+stays legible when shown small. All stories are real, verified news from
+Tuesday, 17 November 2026. Headlines and summaries are kept to one line
+each so the dense layout fits without overlap.
 """
 
 from PIL import Image, ImageDraw, ImageFont
@@ -16,9 +18,10 @@ REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 NAVY = (15, 27, 61)
 RED = (185, 28, 28)
 INK = (25, 25, 25)
-GRAY = (110, 110, 110)
+GRAY = (100, 100, 100)
 RULE = (190, 190, 190)
 WHITE = (255, 255, 255)
+LEAD_BG = (246, 246, 242)
 
 
 def font(path, size):
@@ -41,173 +44,173 @@ def wrap(text, fnt, max_w):
     return lines
 
 
-# ---------------------------------------------------------------- icons
-def icon_radar(d, cx, cy, s, c):
-    r = s // 2
-    for frac in (1.0, 0.66, 0.33):
-        rr = int(r * frac)
-        d.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], outline=c, width=4)
-    d.line([cx, cy, cx + r, cy - r], fill=c, width=4)
-    d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=c)
-    d.ellipse([cx + r // 2 - 5, cy - r // 2 - 5,
-               cx + r // 2 + 5, cy - r // 2 + 5], fill=c)
+LEAD_HEAD = "US SINKS FIVE IRANIAN TANKERS AS WAR AT SEA ERUPTS"
+LEAD_SUM = ("Tehran's forces twice targeted a US warship; Iran fired missiles at "
+            "US troops in Jordan and 10 ships near Hormuz as oil topped $100.")
 
-
-def icon_bridge(d, cx, cy, s, c):
-    hw = s // 2
-    top, bot = cy - s // 3, cy + s // 3
-    d.line([cx - hw, bot, cx + hw, bot], fill=c, width=5)  # deck
-    for tx in (cx - hw + 8, cx + hw - 8):  # towers
-        d.line([tx, top - 6, tx, bot], fill=c, width=5)
-    d.arc([cx - hw, top - s // 2, cx + hw, top + s // 2], 0, 180,
-          fill=c, width=4)  # main cable
-    for fx in (-0.5, -0.25, 0.0, 0.25, 0.5):  # suspenders
-        x = cx + int(hw * fx)
-        d.line([x, top + 10, x, bot], fill=c, width=3)
-    # crack in the deck
-    d.line([cx, bot, cx + 8, bot - 12, cx - 4, bot - 20], fill=RED, width=4)
-
-
-def icon_plane(d, cx, cy, s, c):
-    hw = s // 2
-    # fuselage pointing right, wings, tail
-    d.polygon([(cx - hw, cy), (cx + hw - 8, cy - 8), (cx + hw, cy),
-               (cx + hw - 8, cy + 8)], fill=c)
-    d.polygon([(cx - 6, cy - 4), (cx - hw // 2, cy - s // 2),
-               (cx + 4, cy - 4)], fill=c)
-    d.polygon([(cx - 6, cy + 4), (cx - hw // 2, cy + s // 2),
-               (cx + 4, cy + 4)], fill=c)
-    d.polygon([(cx - hw + 2, cy - 4), (cx - hw + 14, cy - s // 3),
-               (cx - hw + 18, cy - 4)], fill=c)
-
-
-def icon_barrier(d, cx, cy, s, c):
-    hw = s // 2
-    top, bot = cy - s // 3, cy + s // 3
-    for px in (cx - hw + 6, cx + hw - 6):  # posts
-        d.line([px, top, px, bot], fill=c, width=6)
-    # striped barrier arm
-    d.line([cx - hw, top + 8, cx + hw, top + 8], fill=RED, width=10)
-    for i in range(5):
-        x0 = cx - hw + i * (2 * hw // 5)
-        d.line([x0, top + 3, x0 + 10, top + 13], fill=WHITE, width=4)
-    d.line([cx - hw, bot, cx + hw, bot], fill=c, width=4)
-
-
-def icon_jet(d, cx, cy, s, c):
-    hw = s // 2
-    d.polygon([(cx + hw, cy), (cx - hw // 2, cy - 10),
-               (cx - hw, cy), (cx - hw // 2, cy + 10)], fill=c)
-    d.polygon([(cx - 4, cy - 6), (cx - hw // 3, cy - s // 2),
-               (cx + hw // 4, cy - 6)], fill=c)
-    d.polygon([(cx - 4, cy + 6), (cx - hw // 3, cy + s // 2),
-               (cx + hw // 4, cy + 6)], fill=c)
-    d.polygon([(cx - hw + 4, cy - 4), (cx - hw + 16, cy - s // 4),
-               (cx - hw + 20, cy - 4)], fill=c)
-
-
-def icon_drone(d, cx, cy, s, c):
-    hw = s // 2
-    d.rectangle([cx - 12, cy - 8, cx + 12, cy + 8], fill=c)
-    for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
-        ax, ay = cx + sx * hw // 2, cy + sy * hw // 2
-        d.line([cx, cy, ax, ay], fill=c, width=4)
-        d.ellipse([ax - 14, ay - 5, ax + 14, ay + 5], outline=c, width=4)
-
-
-# ---------------------------------------------------------------- page
-STORIES = [
-    ("IRAN STRIKES U.S. RADAR IN BAHRAIN",
-     "Iran fired drones at a U.S. military radar site in Bahrain, its "
-     "third attack on American targets there in days.",
-     icon_radar),
-    ("UKRAINE HITS KERCH BRIDGE",
-     "Ukraine severely damaged the bridge linking Russia to Crimea; "
-     "Russia struck Kyiv bridges in return.",
-     icon_bridge),
-    ("TRUMP HEADS TO ASIA",
-     "Trump in Manila for the ASEAN summit, then trilateral nuclear "
-     "talks with Xi Jinping and Vladimir Putin in Shenzhen.",
-     icon_plane),
-    ("ESTONIA CLOSES RUSSIA BORDER",
-     "All crossings shut from 1 December after a foiled Russian "
-     "sabotage plot.",
-     icon_barrier),
-    ("JAPAN SCRAMBLES JETS",
-     "After suspected Russian aircraft violated its airspace.",
-     icon_jet),
-    ("HOUTHIS ADVANCE IN YEMEN",
-     "Pushing toward Aden; drones fired at a Saudi oil pipeline.",
-     icon_drone),
+# (headline, one-line summary) — kept short so each fits on one line.
+REGIONS_LEFT = [
+    ("MIDDLE EAST", [
+        ("US jets hit Qeshm Island missile site",
+         "Iran hit a US base in Bahrain and claims it downed a US MQ-9 drone."),
+        ("Trump: US 'looking into' Iran dirty-bomb report",
+         "Trump takes a dirty-bomb plot report seriously; Iran denies the claim."),
+        ("Houthis advance on Aden as army retreats",
+         "Saudi named a new coalition chief as rebels neared the port city."),
+        ("Israeli strike on Gaza tents kills three",
+         "Settler attacks hit the West Bank as families returned to Sabra."),
+        ("Four nations urge Israel to open Gaza aid",
+         "The UK, Australia, Canada and Italy called the situation catastrophic."),
+        ("Iraq vows to clear Kataib Hezbollah stronghold",
+         "Baghdad threatened to retake Jurf al-Sakhar from the militia."),
+    ]),
+    ("AFRICA", [
+        ("South Africa: 17 killed in two mass shootings",
+         "Nine dead near Pretoria and eight near Pietermaritzburg in two attacks."),
+        ("DR Congo Ebola 'out of control': 5,500 dead",
+         "Africa CDC reported over 11,200 infections across eight provinces."),
+        ("Ethiopia expels six Sudan diplomats",
+         "Addis Ababa closed Sudan's consulate amid mutual accusations."),
+        ("Amnesty: UN failed to stop S. Sudan massacre",
+         "Peacekeepers ignored warnings before a village attack, Amnesty said."),
+    ]),
+    ("ASIA-PACIFIC", [
+        ("APEC CEO Summit opens in Shenzhen",
+         "Over 2,000 leaders from 21 economies gathered in Shenzhen, China."),
+        ("India edge Pakistan in U19 Asia Cup thriller",
+         "India won by one wicket off the last ball in the Oman final."),
+        ("Pakistan cuts petrol, diesel prices by Rs2",
+         "Petrol fell to Rs328 and diesel to Rs358 a litre from today."),
+        ("ECO summit adopts Vision 2035 in Islamabad",
+         "Ministers approved a ten-year roadmap for trade and connectivity."),
+        ("Albanese in China as superpower talks loom",
+         "Australia's PM prepared for Xi talks as the trilateral overshadowed APEC."),
+    ]),
 ]
+
+REGIONS_RIGHT = [
+    ("EUROPE", [
+        ("Ukraine hits Kerch Bridge for a second day",
+         "A span fell into the strait; two killed as Russia closed the bridge."),
+        ("Russian strike on Zaporizhzhia kills 40",
+         "A strike on a school aid centre killed at least 26, Ukraine said."),
+        ("Russia: French troops in Ukraine are targets",
+         "Moscow warned Paris that sending troops would be direct involvement."),
+        ("Japan scrambles jets as Russian planes intrude",
+         "Two suspected Russian planes violated Japanese airspace early Tuesday."),
+        ("COP31 draft: faster fossil-fuel exit, $120bn",
+         "Antalya negotiators published a draft calling for more climate finance."),
+        ("UK sanctions Israeli settlement firms",
+         "London acted to protect the two-state solution as settler violence rose."),
+        ("Le Pen vows earlier retirement if she wins",
+         "France's far-right leader promised an earlier pension age for many."),
+        ("EU charges Temu over illegal product sales",
+         "Brussels said the platform did not do enough to stop unlawful goods."),
+    ]),
+    ("AMERICAS", [
+        ("US loses measles-free status after 26 years",
+         "Over 5,400 cases and 10 deaths in the worst outbreak in three decades."),
+        ("Nvidia posts bumper results after Huang exit",
+         "The AI chip giant reported strong earnings a day after its chief left."),
+        ("US soldier held in UK on spying suspicion",
+         "The serviceman was arrested by UK police and taken into US custody."),
+        ("Major US banks hit by unexplained outages",
+         "Customers were locked out in a wave of unexplained banking failures."),
+        ("United Airlines outage strands passengers",
+         "A system failure left travellers stuck on the tarmac across the US."),
+        ("Trump in Asia ahead of talks with Putin, Xi",
+         "Trump said he would be open to a one-on-one with Russia's leader."),
+        ("Xi-Trump-Putin summit set for Thursday",
+         "The first-ever trilateral of the three leaders will take place at APEC."),
+        ("Epstein death was murder, expert claims",
+         "A forensic expert said the examiner's file showed homicide, not suicide."),
+    ]),
+]
+
+FOOTER = ("ALSO: Guinea arrests 1,200 in gold-mining crackdown  \u2022  "
+          "Trump denies visa to Bethlehem priest  \u2022  "
+          "FAA seeks $50bn more for air traffic control")
+
+
+def draw_column(d, regions, x, col_w, top, bottom):
+    """Draw region sections into one column. Returns the final y."""
+    y = top
+    f_label = font(BOLD, 19)
+    f_head = font(BOLD, 17)
+    f_sum = font(REG, 13)
+    for name, stories in regions:
+        # Region label: red name + thin rule.
+        d.text((x, y), name, font=f_label, fill=RED)
+        y += 24
+        d.line([x, y, x + col_w, y], fill=RULE, width=1)
+        y += 6
+        for head, summ in stories:
+            hl = wrap(head, f_head, col_w)
+            sl = wrap(summ, f_sum, col_w)
+            if len(hl) > 1 or len(sl) > 1:
+                print("WARNING wraps to 2 lines: %r / %r" % (head, summ))
+            for ln in hl:
+                d.text((x, y), ln, font=f_head, fill=INK)
+                y += 20
+            for ln in sl:
+                d.text((x, y), ln, font=f_sum, fill=GRAY)
+                y += 16
+            y += 3  # gap between stories
+        y += 2  # gap after a region
+    return y
+
+
+def build_image():
+    img = Image.new("RGB", (W, H), WHITE)
+    d = ImageDraw.Draw(img)
+
+    # ---- Masthead -----------------------------------------------------
+    f_title = font(BOLD, 56)
+    f_date = font(BOLD, 27)
+    title = "WORLD NEWS"
+    tw = d.textlength(title, font=f_title)
+    d.text(((W - tw) / 2, 6), title, font=f_title, fill=NAVY)
+    date = "TUESDAY, 17 NOVEMBER 2026"
+    dw = d.textlength(date, font=f_date)
+    d.text(((W - dw) / 2, 64), date, font=f_date, fill=RED)
+    d.line([24, 96, W - 24, 96], fill=NAVY, width=3)
+
+    # ---- Lead story ---------------------------------------------------
+    d.rectangle([24, 104, W - 24, 256], fill=LEAD_BG, outline=RULE, width=1)
+    f_lead_tag = font(BOLD, 15)
+    d.text((36, 112), "LEAD", font=f_lead_tag, fill=RED)
+    f_lead_head = font(BOLD, 30)
+    f_lead_sum = font(REG, 19)
+    hl = wrap(LEAD_HEAD, f_lead_head, W - 72)
+    y = 132
+    for ln in hl:
+        d.text((36, y), ln, font=f_lead_head, fill=NAVY)
+        y += 35
+    sl = wrap(LEAD_SUM, f_lead_sum, W - 72)
+    for ln in sl:
+        d.text((36, y), ln, font=f_lead_sum, fill=INK)
+        y += 23
+
+    # ---- Body: two columns --------------------------------------------
+    body_top, body_bottom = 268, 980
+    col_w = 476
+    y_left = draw_column(d, REGIONS_LEFT, 24, col_w, body_top, body_bottom)
+    y_right = draw_column(d, REGIONS_RIGHT, 524, col_w, body_top, body_bottom)
+
+    # ---- Footer -------------------------------------------------------
+    d.line([24, 984, W - 24, 984], fill=NAVY, width=2)
+    f_foot = font(REG, 13)
+    fw = d.textlength(FOOTER, font=f_foot)
+    d.text(((W - fw) / 2, 996), FOOTER, font=f_foot, fill=GRAY)
+
+    print("column end y: left=%d right=%d (body bottom=%d)" % (y_left, y_right, body_bottom))
+    return img
 
 
 def main():
-    img = Image.new("RGB", (W, H), WHITE)
-    d = ImageDraw.Draw(img)
-    m = 32  # margin
-
-    # ---- masthead
-    d.line([m, 26, W - m, 26], fill=NAVY, width=4)
-    mast = font(BOLD, 96)
-    title = "WORLD NEWS"
-    tw = mast.getlength(title)
-    d.text(((W - tw) / 2, 38), title, font=mast, fill=NAVY)
-    d.line([m, 152, W - m, 152], fill=NAVY, width=3)
-    # date band
-    d.rectangle([m, 166, W - m, 214], fill=NAVY)
-    date_f = font(BOLD, 36)
-    date = "TUESDAY, 17 NOVEMBER 2026"
-    dw = date_f.getlength(date)
-    d.text(((W - dw) / 2, 172), date, font=date_f, fill=WHITE)
-
-    # ---- story grid: 2 columns x 3 rows
-    grid_top, grid_bottom = 238, 986
-    row_gap, col_gap = 16, 24
-    row_h = (grid_bottom - grid_top - 2 * row_gap) // 3
-    col_w = (W - 2 * m - col_gap) // 2
-    head_f = font(BOLD, 32)
-    body_f = font(REG, 24)
-    icon_s = 80
-
-    for i, (headline, body, icon_fn) in enumerate(STORIES):
-        row, col = divmod(i, 2)
-        x = m + col * (col_w + col_gap)
-        y = grid_top + row * (row_h + row_gap)
-
-        # light dividers between blocks
-        if row > 0:
-            d.line([m, y - row_gap // 2, W - m, y - row_gap // 2],
-                   fill=RULE, width=2)
-        if col > 0:
-            d.line([x - col_gap // 2, y, x - col_gap // 2, y + row_h],
-                   fill=RULE, width=2)
-
-        # icon, top-left of the block
-        icon_fn(d, x + icon_s // 2, y + icon_s // 2 + 6, icon_s, RED)
-
-        # text column to the right of the icon
-        tx = x + icon_s + 16
-        tw_max = col_w - icon_s - 16
-        lines = wrap(headline, head_f, tw_max)
-        ty = y + 4
-        for ln in lines:
-            d.text((tx, ty), ln, font=head_f, fill=NAVY)
-            ty += 38
-        ty += 8
-        for ln in wrap(body, body_f, tw_max):
-            d.text((tx, ty), ln, font=body_f, fill=INK)
-            ty += 30
-
-    # ---- footer
-    d.line([m, 1000, W - m, 1000], fill=NAVY, width=2)
-    foot_f = font(REG, 17)
-    foot = "Six stories that defined Tuesday, 17 November 2026."
-    fw = foot_f.getlength(foot)
-    d.text(((W - fw) / 2, 1006), foot, font=foot_f, fill=GRAY)
-
-    img.save("entry.png", optimize=True)
-    print("saved entry.png")
+    img = build_image()
+    img.save("entry.png", format="PNG")
+    print("saved entry.png", img.size, img.mode)
 
 
 if __name__ == "__main__":
